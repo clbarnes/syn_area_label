@@ -1,0 +1,39 @@
+Bootstrap: docker
+From: python:3.10.8-bullseye
+
+%setup
+    mkdir -p \
+        $APPTAINER_ROOTFS/project/.git \
+        $APPTAINER_ROOTFS/project/credentials \
+        $APPTAINER_ROOTFS/project/data
+
+%files
+    ./src /project/src
+    ./scripts /project/scripts
+    # ./tests /project/tests
+    ./.gitignore /project/.gitignore
+    ./LICENSE /project/LICENSE
+    ./pyproject.toml /project/pyproject.toml
+    ./README.md /project/README.md
+    ./requirements.txt /project/requirements.txt
+    ./setup.py /project/setup.py
+
+%post
+    cd /project
+    pip install -U pip setuptools wheel
+    pip install .
+    pip cache purge
+
+    VERSION=$(python -c 'import syn_area_label as pkg; print(pkg.__version__)')
+    echo "version $VERSION" >> "$APPTAINER_LABELS"
+
+%labels
+    author Chris L. Barnes
+    email chrislloydbarnes@gmail.com
+    url https://github.com/clbarnes/syn_area_label
+    package syn_area_label
+
+%help
+    syn_area_label
+
+    Preparing data for labelling synaptic areas using CATMAID annotations

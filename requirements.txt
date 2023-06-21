@@ -1,0 +1,17 @@
+# Requirements should go here, ABOVE the "#extra: dev" line
+
+#extra: dev
+
+black
+extreqs
+flake8
+flake8-pyproject
+ipdb
+ipython
+isort
+mypy
+pur
+pytest
+setuptools
+setuptools-scm
+wheel

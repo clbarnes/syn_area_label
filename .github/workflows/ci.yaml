@@ -1,0 +1,46 @@
+on: [push, pull_request]
+name: Lint, test, deploy package
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - run: pip install $(grep -E '^(black|flake8|isort|mypy)' requirements.txt)
+      - run: make lint
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10']
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: |
+          pip install -U pip wheel setuptools
+          pip install -r requirements.txt
+        name: Install dependencies
+      - run: |
+          pip install .
+        name: Install package
+      - run: pytest --verbose
+
+  container:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: eWaterCycle/setup-apptainer@v2
+      - run: make apptainer
+
