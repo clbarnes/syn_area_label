@@ -1,17 +1,24 @@
 # Requirements should go here, ABOVE the "#extra: dev" line
 
+numpy
+pandas >= 2
+networkx >= 3
+h5py
+python-catmaid
+zarr
+dask
+tqdm
+
 #extra: dev
 
 black
 extreqs
-flake8
-flake8-pyproject
 ipdb
 ipython
-isort
 mypy
 pur
 pytest
+ruff
 setuptools
 setuptools-scm
 wheel

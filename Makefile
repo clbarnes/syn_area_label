@@ -1,13 +1,12 @@
 .PHONY: format
 format:
-	isort . \
-	&& black .
+	ruff check --fix-only . && \
+	black .
 
 .PHONY: lint
 lint:
 	black --check .
-	isort --check .
-	flake8 .
+	ruff check .
 
 lint-type: lint
 	mypy .

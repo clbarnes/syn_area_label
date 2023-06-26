@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from setuptools import find_packages, setup
 from extreqs import parse_requirement_files
+from setuptools import find_packages, setup
 
 with open(Path(__file__).resolve().parent / "README.md") as f:
     readme = f.read()
@@ -18,10 +18,7 @@ setup(
     long_description=readme,
     long_description_content_type="text/markdown",
     package_dir={"": "src"},
-    packages=find_packages(
-        where="src",
-        include=["syn_area_label*"]
-    ),
+    packages=find_packages(where="src", include=["syn_area_label*"]),
     install_requires=install_requires,
     extras_require=extras_require,
     python_requires=">=3.9, <4.0",
