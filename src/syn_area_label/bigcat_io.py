@@ -6,6 +6,7 @@ Alternative implementation here: https://github.com/cremi/cremi_python
 """
 from __future__ import annotations
 
+import logging
 from abc import ABC
 from collections.abc import Mapping, Sequence
 from typing import Any, NewType, Optional, Union
@@ -18,6 +19,8 @@ from h5py import File
 from syn_area_label.utils import WorldCoord
 
 from .constants import DIMS
+
+logger = logging.getLogger(__name__)
 
 
 def require_parent_groups(hdf5_file: File, ds_path: str):
@@ -263,6 +266,7 @@ class Annotations:
         return aid
 
     def to_hdf5(self, hdf5_file: File):
+        logger.info("Writing annotations")
         g = hdf5_file.require_group("/annotations")
         g.create_dataset("ids", data=self.ann_table["id"], dtype=np.uint64)
         g.create_dataset(

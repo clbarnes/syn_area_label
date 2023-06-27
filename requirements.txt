@@ -8,6 +8,7 @@ python-catmaid
 zarr
 dask
 tqdm
+fsspec[http]
 
 #extra: dev
 

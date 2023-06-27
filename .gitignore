@@ -144,3 +144,5 @@ src/syn_area_label/version.py
 
 # apptainer image files
 *.sif
+
+*.hdf5

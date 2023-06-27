@@ -1,4 +1,5 @@
 from typing import Any, Iterable, Optional
+import logging
 
 import h5py
 import numpy as np
@@ -9,8 +10,11 @@ from tqdm import tqdm
 
 from .utils import VoxelCoord, WorldCoord
 
+logger = logging.getLogger(__name__)
+
 
 def n5_to_dask(uri: str, dataset: str) -> da.Array:
+    logger.debug("Opening n5 dataset")
     store = zarr.N5FSStore(uri, mode="r")
     group = zarr.open_group(store, "r")
     ds = group[dataset]
@@ -29,6 +33,7 @@ class WrappedVolume:
     def get_roi(
         self, offset: WorldCoord, shape: WorldCoord
     ) -> tuple[WorldCoord, da.Array]:
+        logger.debug("Getting ROI at %s", offset)
         offset_vox = offset.to_voxel(self.resolution, self.translation, np.floor)
         end = WorldCoord(*(offset.to_ndarray() + shape.to_ndarray()))
         end_vox = end.to_voxel(self.resolution, self.translation, np.ceil)
@@ -66,7 +71,9 @@ class RoiExtractor:
     def _create_dataset(self) -> h5py.Dataset:
         g = self.hdf5_file.require_group("/volumes")
         self.ds_kwargs.setdefault("compression", "lzf")
-        self.ds_kwargs.setdefault("chunks", self.raw_volume.array.chunks)
+        self.ds_kwargs.setdefault(
+            "chunks", tuple(c[0] for c in self.raw_volume.array.chunks)
+        )
         ds = g.create_dataset(
             "raw",
             shape=self.subvol_shape.to_ndarray(),
@@ -97,7 +104,10 @@ class RoiExtractor:
 
         actual_offset, roi = self.raw_volume.get_roi(offset, shape)
         internal_offset = actual_offset.to_voxel(self.resolution, self.translation)
-        slicing = tuple(slice(i, i + s) for i, s in zip(internal_offset, roi.shape))
+        slicing = tuple(
+            slice(int(i), int(i + s)) for i, s in zip(internal_offset, roi.shape)
+        )
+        logger.debug("Writing ROI to %s", slicing)
         dataset[slicing] = roi
         return dataset
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, Iterable, NamedTuple, Optional
 
+import h5py
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -11,16 +12,25 @@ from numpy.typing import DTypeLike
 logger = logging.getLogger(__name__)
 
 
-def setup_logging(level=logging.DEBUG):
+def setup_logging(
+    level=logging.DEBUG, logger_levels: Optional[dict[int, list[str]]] = None
+):
     """Sane default logging setup.
 
     Should only be called once, and only by a script.
     """
     logging.basicConfig(level=level)
+    if logger_levels is None:
+        logger_levels = dict()
 
     # these are packages with particularly noisy logging
     logging.getLogger("urllib3").setLevel(logging.INFO)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("fsspec").setLevel(logging.INFO)
+
+    for level, names in logger_levels.items():
+        for name in names:
+            logging.getLogger(name).setLevel(level)
 
 
 Rounder = Callable[[np.ndarray], np.ndarray]
@@ -84,6 +94,7 @@ def intersecting_volumes(
     offset_shapes: list[tuple[WorldCoord, WorldCoord]], threshold: float = 0
 ) -> Iterable[set[int]]:
     """Find which offset-shape pairs overlap, given a threshold volume."""
+    logger.info("checking for intersections between %s ROIs", len(offset_shapes))
     g = nx.Graph()
     g.add_nodes_from(range(len(offset_shapes)))
     bboxes = [to_bbox(*os) for os in offset_shapes]
@@ -133,7 +144,7 @@ def roi_containing_rois(
     corners = []
     for offset, shape in rois:
         corners.append(offset.to_ndarray())
-        corners.append(shape.to_ndarray + corners[-1])
+        corners.append(shape.to_ndarray() + corners[-1])
     corn = np.array(corners, dtype=corners[-1].dtype)
     mi = corn.min(0)
     ma = corn.max(0)
@@ -142,7 +153,7 @@ def roi_containing_rois(
 
 def project_presyn(
     postsyn_nodes: pd.DataFrame, connector_df: pd.DataFrame, xy_overshoot: float = 0.1
-) -> tuple[dict[int, WorldCoord], dict[int, int]]:
+) -> tuple[dict[int, WorldCoord], dict[int, int], dict[int, int]]:
     """Create presynaptic sites for the given postsynapses.
 
     Projects back from the postsynapse to the connector,
@@ -172,6 +183,8 @@ def project_presyn(
         Mapp node IDs to locations
     pre_post : dict[int, int]
         Map presynaptic site IDs to postsynaptic side IDs
+    pre_conn : dict[int, int]
+        Map presynaptic site IDs to connector IDs
     """
     df = postsyn_nodes.merge(connector_df, on="node_id", suffixes=(None, "_c"))
 
@@ -184,6 +197,7 @@ def project_presyn(
 
     locs = dict()
     pre_post = dict()
+    pre_conn = dict()
 
     pre_id = 0
     used_ids = set(postsyn_nodes["node_id"])
@@ -193,13 +207,14 @@ def project_presyn(
             pre_id += 1
         if pre_id not in locs:
             locs[pre_id] = WorldCoord(row.z_c, row.y_n, row.x_n)
+            pre_conn[pre_id] = row.connector_id
             pre_id += 1
 
         if row.node_id not in locs:
             locs[row.node_id] = WorldCoord(row.z, row.y, row.x)
         pre_post[pre_id] = row.node_id
 
-    return locs, pre_post
+    return locs, pre_post, pre_conn
 
 
 def split_into_rois(
@@ -221,6 +236,9 @@ def split_into_rois(
     offset_shapes = []
     padding = WorldCoord(pad, pad, pad)
     for pre_id, post_id in pre_post_list:
+        if pre_id not in locs or post_id not in locs:
+            logger.debug("Skipping synapse where pre/post node location unknown")
+            continue
         offset_shape = roi_containing_points([locs[pre_id], locs[post_id]], padding)
         if offset_shape is None:
             raise RuntimeError("impossible")
@@ -241,3 +259,19 @@ def split_into_rois(
         out.append((loc, partners, rois))
 
     return out
+
+
+def write_table_homogeneous(
+    hdf5_file: h5py.File, df: pd.DataFrame, name: str, dtype: DTypeLike
+):
+    """name is within /tables group"""
+    g = hdf5_file.require_group("tables")
+    df_data = df.to_numpy(dtype)
+    ds = g.create_dataset(name, data=df_data)
+    ds.attrs["columns"] = list(df.columns)
+
+
+def read_table_homogeneous(hdf5_file: h5py.File, name: str) -> pd.DataFrame:
+    """name is within /tables group"""
+    ds: h5py.Dataset = hdf5_file["/tables/" + name]
+    return pd.DataFrame(ds[:], columns=ds.attrs["columns"])
