@@ -1,19 +1,7 @@
 from __future__ import annotations
-from contextlib import contextmanager
 
 import logging
-from pathlib import Path
-from typing import (
-    Callable,
-    Hashable,
-    Iterable,
-    Literal,
-    NamedTuple,
-    Optional,
-    Sequence,
-    Union,
-)
-from collections.abc import Mapping
+from typing import Callable, Iterable, NamedTuple, Optional
 
 import h5py
 import networkx as nx
@@ -22,8 +10,6 @@ import pandas as pd
 from numpy.typing import DTypeLike
 
 logger = logging.getLogger(__name__)
-JsoPrimitive = Union[int, float, bool, None, str]
-Jso = Union[JsoPrimitive, dict[str, "Jso"], list["Jso"]]
 
 
 def setup_logging(
@@ -48,8 +34,6 @@ def setup_logging(
 
 
 Rounder = Callable[[np.ndarray], np.ndarray]
-
-Dim = Literal["x", "y", "z"]
 
 
 class WorldCoord(NamedTuple):

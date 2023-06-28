@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import json
+import logging
 
 import h5py
 import numpy as np
 import pandas as pd
 import pymaid
+from tqdm import tqdm
 
-from syn_area_label.bigcat_io import Annotations, LabelVolume
+from syn_area_label.bigcat_io import Annotations
 from syn_area_label.utils import (
     WorldCoord,
     project_presyn,
@@ -14,10 +17,11 @@ from syn_area_label.utils import (
     split_into_rois,
     setup_logging,
     write_table_homogeneous,
+    sanitise_chunks,
 )
 from syn_area_label.zarr_io import RoiExtractor, WrappedVolume, n5_to_dask
 
-setup_logging(level=logging.DEBUG)
+setup_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 HERE = Path(__file__).resolve().parent
@@ -42,8 +46,11 @@ columns "connector_id", "node_id", "z", "y", "x", like in navis.
 However, ensure that only postsynaptic nodes are included.
 """
 
-postsyn_nodes = neurons.nodes
-connector_df = neurons.postsynapses
+all_nodes = neurons.nodes
+output_conn_ids = set(neurons.presynapses["connector_id"])
+connector_df = neurons.postsynapses[
+    neurons.postsynapses["connector_id"].isin(output_conn_ids)
+]
 
 # configuration
 
@@ -53,13 +60,13 @@ n5_url = "https://neurophyla.mrc-lmb.cam.ac.uk/tiles/0111-8/seymour.n5"
 n5_ds = "volumes/raw/c0/s0"
 translation = WorldCoord(6050, 0, 0)
 resolution = WorldCoord(50, 3.8, 3.8)
-
+out_dir = Path("/data/syn_area_volumes")
 
 
 # todo: write table of
 # original connector id, new pre id, post tnid
 # possibly pre skid, pre tnid, post skid? but these can all be determined post-hoc
-all_locs, all_pre_post, all_pre_conn = project_presyn(postsyn_nodes, connector_df)
+all_locs, all_pre_post, all_pre_conn = project_presyn(all_nodes, connector_df)
 
 raw_arr = n5_to_dask(n5_url, n5_ds)
 wrapped_vol = WrappedVolume(raw_arr, translation, resolution)
@@ -67,7 +74,7 @@ wrapped_vol = WrappedVolume(raw_arr, translation, resolution)
 split_rois = split_into_rois(all_locs, all_pre_post, padding)
 logger.info("Split ROIs into %s files", len(split_rois))
 
-for idx, (locs, pre_post, rois) in enumerate(split_rois):
+for idx, (locs, pre_post, rois) in enumerate(tqdm(split_rois, "output files")):
     offset, shape = roi_containing_rois(rois)
     vox_offset = offset.to_voxel(resolution, translation, np.floor)
     actual_offset = vox_offset.to_world(resolution, translation)
@@ -88,22 +95,31 @@ for idx, (locs, pre_post, rois) in enumerate(split_rois):
         conn_map_rows, columns=["presynaptic_site_id", "connector_id"], dtype=np.uint64
     )
 
-    with h5py.File(HERE / f"data_{idx:02}.hdf5", "x") as f:
-        extractor = RoiExtractor(wrapped_vol, vox_offset, vox_shape, f)
-        ds = None
-        for this_offset, this_shape in rois:
-            ds = extractor.extract_roi(this_offset, this_shape, ds)
-
+    with h5py.File(out_dir / f"data_{idx:02}.hdf5", "x") as f:
         annotations = Annotations.from_partners(offset_locs, pre_post)
         annotations.to_hdf5(f)
+
+        extractor = RoiExtractor(wrapped_vol, vox_offset, vox_shape, f)
+        ds = None
+        counter = 0
+        for this_offset, this_shape in tqdm(rois, "ROIs"):
+            ds = extractor.extract_roi(this_offset, this_shape, ds)
+            # todo: remove
+            # counter += 1
+            # if counter > 3:
+            #     break
 
         if ds is None:
             continue
 
-        clefts = LabelVolume(
-            "clefts", np.zeros(ds.shape, dtype=np.uint64), resolution, actual_offset
+        labels = f.require_group("volumes").require_group("labels")
+        chunks = sanitise_chunks(ds.chunks)
+        label_ds = labels.create_dataset(
+            "clefts", ds.shape, np.uint64, chunks=chunks, compression="lzf", fillvalue=0
         )
-        clefts.to_hdf5(
-            f, {"chunks": tuple(c[0] for c in ds.chunks), "compression": "lzf"}
+        label_ds.attrs["resolution"] = resolution.to_ndarray()
+        label_ds.attrs["offset_from_project"] = actual_offset.to_ndarray()
+
+        write_table_homogeneous(
+            f, conn_map_df, "/annotations/presynaptic_site/pre_to_conn", np.uint64
         )
-        write_table_homogeneous(f, conn_map_df, "connector_ids", np.uint64)
