@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import json
-import logging
 
 import h5py
 import numpy as np
@@ -55,6 +53,7 @@ n5_url = "https://neurophyla.mrc-lmb.cam.ac.uk/tiles/0111-8/seymour.n5"
 n5_ds = "volumes/raw/c0/s0"
 translation = WorldCoord(6050, 0, 0)
 resolution = WorldCoord(50, 3.8, 3.8)
+
 
 
 # todo: write table of
