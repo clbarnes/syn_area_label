@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Iterable, NamedTuple, Optional
+from typing import Callable, Hashable, Iterable, NamedTuple, Optional, Sequence
+from collections.abc import Mapping
 
 import h5py
 import networkx as nx
@@ -275,3 +276,31 @@ def read_table_homogeneous(hdf5_file: h5py.File, name: str) -> pd.DataFrame:
     """name is within /tables group"""
     ds: h5py.Dataset = hdf5_file["/tables/" + name]
     return pd.DataFrame(ds[:], columns=ds.attrs["columns"])
+
+
+class DfBuilder:
+    def __init__(self, dtypes: dict[Hashable, DTypeLike]) -> None:
+        self.dtypes = dtypes
+        self.rows = []
+
+    @property
+    def length(self) -> int:
+        return len(self.rows)
+
+    @property
+    def width(self) -> int:
+        return len(self.dtypes)
+
+    def append(self, row: Sequence):
+        idx = self.length
+        if isinstance(row, Mapping):
+            self.rows.append([row[k] for k in self.dtypes])
+        else:
+            if len(row) != self.width:
+                raise ValueError("Row is the wrong length for the dataframe's width")
+            self.rows.append(list(row))
+        return idx
+
+    def build(self):
+        df = pd.DataFrame(self.rows, columns=list(self.dtypes), dtype=object)
+        return df.astype(self.dtypes)
