@@ -1,7 +1,18 @@
 from __future__ import annotations
+from contextlib import contextmanager
 
 import logging
-from typing import Callable, Hashable, Iterable, NamedTuple, Optional, Sequence
+from pathlib import Path
+from typing import (
+    Callable,
+    Hashable,
+    Iterable,
+    Literal,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Union,
+)
 from collections.abc import Mapping
 
 import h5py
@@ -11,6 +22,8 @@ import pandas as pd
 from numpy.typing import DTypeLike
 
 logger = logging.getLogger(__name__)
+JsoPrimitive = Union[int, float, bool, None, str]
+Jso = Union[JsoPrimitive, dict[str, "Jso"], list["Jso"]]
 
 
 def setup_logging(
@@ -36,6 +49,8 @@ def setup_logging(
 
 Rounder = Callable[[np.ndarray], np.ndarray]
 
+Dim = Literal["x", "y", "z"]
+
 
 class WorldCoord(NamedTuple):
     """ZYX coordinate of floats"""
@@ -52,6 +67,9 @@ class WorldCoord(NamedTuple):
     ):
         frac = (self.to_ndarray() - offset.to_ndarray()) / resolution.to_ndarray()
         return VoxelCoord(*round(frac).astype(np.uint64))
+
+    def ordered(self, order: Iterable[Dim]) -> list[float]:
+        return [getattr(self, d) for d in order]
 
 
 class VoxelCoord(NamedTuple):
@@ -71,6 +89,9 @@ class VoxelCoord(NamedTuple):
                 + offset.to_ndarray()
             )
         )
+
+    def ordered(self, order: Iterable[Dim]) -> list[int]:
+        return [getattr(self, d) for d in order]
 
 
 def to_bbox(offset: WorldCoord, shape: WorldCoord):
@@ -161,7 +182,7 @@ def project_presyn(
     then overshoots by a fraction of that distance in XY.
     This ensures that each postsynapse has a unique presynaptic site,
     which is likely to be inside the presynaptic cell,
-    and which is is likely not to overlap with other presynaptic sites.
+    and which is likely not to overlap with other presynaptic sites.
 
     Parameters
     ----------
@@ -181,9 +202,9 @@ def project_presyn(
     Returns
     -------
     locations : dict[int, WorldCoord]
-        Mapp node IDs to locations
+        Map node IDs to locations
     pre_post : dict[int, int]
-        Map presynaptic site IDs to postsynaptic side IDs
+        Map presynaptic site IDs to postsynaptic site IDs
     pre_conn : dict[int, int]
         Map presynaptic site IDs to connector IDs
     """
@@ -206,14 +227,17 @@ def project_presyn(
     for row in df.itertuples(index=False):
         while pre_id in used_ids:
             pre_id += 1
+
+        pre_post[pre_id] = row.node_id
+
         if pre_id not in locs:
-            locs[pre_id] = WorldCoord(row.z_c, row.y_n, row.x_n)
+            locs[pre_id] = WorldCoord(float(row.z_c), float(row.y_n), float(row.x_n))
             pre_conn[pre_id] = row.connector_id
-            pre_id += 1
 
         if row.node_id not in locs:
-            locs[row.node_id] = WorldCoord(row.z, row.y, row.x)
-        pre_post[pre_id] = row.node_id
+            locs[row.node_id] = WorldCoord(float(row.z), float(row.y), float(row.x))
+
+        pre_id += 1
 
     return locs, pre_post, pre_conn
 
@@ -304,3 +328,39 @@ class DfBuilder:
     def build(self):
         df = pd.DataFrame(self.rows, columns=list(self.dtypes), dtype=object)
         return df.astype(self.dtypes)
+
+
+def add_suffix(path: Path, suffix: str) -> Path:
+    return path.parent / (path.name + suffix)
+
+
+class CompletionChecker:
+    def __init__(self, root: Path = Path()) -> None:
+        self.root = Path(root)
+
+    def part_path(self, path: Path) -> Path:
+        return add_suffix(self.root / path, ".part")
+
+    def is_complete(self, path: Path) -> bool:
+        """Whether the output file was completed successfully."""
+        return path.exists() and not self.part_path(path).exists()
+
+    def mark_in_progress(self, path: Path) -> bool:
+        """Mark a particular path as being in progress by creating a part file.
+
+        Returns whether a part file already existed.
+        """
+        p = self.part_path(path)
+        out = p.exists()
+        p.touch()
+        return out
+
+    def mark_complete(self, path: Path) -> bool:
+        """Mark a particular path as being completed by deleting a part file.
+
+        Returns whether a part file existed.
+        """
+        p = self.part_path(path)
+        out = p.exists()
+        p.unlink(True)
+        return out
