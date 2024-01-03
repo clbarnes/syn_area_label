@@ -3,7 +3,7 @@ from abc import ABC
 from dataclasses import asdict, dataclass
 import math
 from pathlib import Path
-from typing import Iterable, Mapping, NamedTuple, Optional, Union
+from typing import Iterable, Mapping, NamedTuple, Optional
 from multiscale_read import NglN5Multiscale
 import zarr
 import xarray as xr
@@ -87,31 +87,23 @@ class RoiCacher:
 
         self.checker = CompletionChecker(self.roi_dir)
 
-    def write_edge(self, edge_id: int, overwrite=True):
-        dpath = self.roi_dir / f"edge_{edge_id:0{self.id_pad}}"
+    def _write_connector(self, conn_id: int, overwrite=True) -> int:
+        ets = self.edge_tables.single_connector(conn_id)
+
+        dpath = self.roi_dir / f"conn_{conn_id}"
         if not overwrite and self.checker.is_complete(dpath):
-            return False
+            return -1
+
+        out = len(ets.edges)
+        if out == 0:
+            return out
 
         self.checker.mark_in_progress(dpath)
-        # dpath.mkdir(exist_ok=True)
-        # meta_path = dpath / "metadata.json"
-        # if meta_path.is_file():
-        #     return False
-
-        df = self.roi_table
-
-        rows = df[df["edge_id"] == edge_id]
-        if len(rows) == 0:
-            raise ValueError(f"No edge with ID {edge_id}")
-        row = rows.iloc[0]
 
         slicing = dict()
-        extents = dict()
-        for d in "zyx":
-            mn = row[f"{d}_min"]
-            mx = row[f"{d}_max"]
+        extents = ets.total_roi(self.padding_dict)
+        for d, (mn, mx) in extents.items():
             slicing[d] = slice(mn, mx)
-            extents[d] = (mn, mx)
 
         subvol = self.volume.sel(slicing)
 
@@ -120,23 +112,81 @@ class RoiCacher:
             {k: v[0] for k, v in subvol.coords.items()},
             {k: v[1] - v[0] for k, v in subvol.coords.items()},
         )
-        out = Roi(meta, self.edge_tables.in_roi(extents), subvol.to_numpy())
+        roi = Roi(meta, ets, subvol.to_numpy())
         if self.cremi:
-            out.to_cremi(dpath.with_suffix(".hdf5"))
+            roi.to_cremi(dpath.with_suffix(".hdf5"))
         else:
-            out.to_directory(dpath)
+            roi.to_directory(dpath)
+
         self.checker.mark_complete(dpath)
 
-        return True
+        return out
 
-    def write_all(self, overwrite=True):
+    # def write_edge(self, edge_id: int, overwrite=True):
+    #     dpath = self.roi_dir / f"edge_{edge_id:0{self.id_pad}}"
+    #     if not overwrite and self.checker.is_complete(dpath):
+    #         return False
+
+    #     self.checker.mark_in_progress(dpath)
+    #     # dpath.mkdir(exist_ok=True)
+    #     # meta_path = dpath / "metadata.json"
+    #     # if meta_path.is_file():
+    #     #     return False
+
+    #     df = self.roi_table
+
+    #     rows = df[df["edge_id"] == edge_id]
+    #     if len(rows) == 0:
+    #         raise ValueError(f"No edge with ID {edge_id}")
+    #     row = rows.iloc[0]
+
+    #     slicing = dict()
+    #     extents = dict()
+    #     for d in "zyx":
+    #         mn = row[f"{d}_min"]
+    #         mx = row[f"{d}_max"]
+    #         slicing[d] = slice(mn, mx)
+    #         extents[d] = (mn, mx)
+
+    #     subvol = self.volume.sel(slicing)
+
+    #     meta = RoiMetadata(
+    #         list(subvol.dims),
+    #         {k: v[0] for k, v in subvol.coords.items()},
+    #         {k: v[1] - v[0] for k, v in subvol.coords.items()},
+    #     )
+    #     out = Roi(meta, self.edge_tables.in_roi(extents), subvol.to_numpy())
+    #     if self.cremi:
+    #         out.to_cremi(dpath.with_suffix(".hdf5"))
+    #     else:
+    #         out.to_directory(dpath)
+    #     self.checker.mark_complete(dpath)
+
+    #     return True
+
+    def write_connectors(self, overwrite=True):
+        """Write one ROI per connector.
+
+        Returns number of connectors written.
+        """
         self._write_shared()
 
+        conns = self.edge_tables.connectors["connector_id"].unique()
         count = 0
-
-        for edge_id in tqdm(self.edge_tables.edges["edge_id"], "writing ROIs"):
-            count += self.write_edge(edge_id, overwrite)
+        for conn in tqdm(conns, "writing connector ROIs"):
+            res = self._write_connector(conn, overwrite)
+            if res > 0:
+                count += 1
         return count
+
+    # def write_all(self, overwrite=True):
+    #     self._write_shared()
+
+    #     count = 0
+
+    #     for edge_id in tqdm(self.edge_tables.edges["edge_id"], "writing ROIs"):
+    #         count += self.write_edge(edge_id, overwrite)
+    #     return count
 
     def _write_shared(self):
         self.roi_dir.mkdir(parents=True, exist_ok=True)
@@ -146,8 +196,26 @@ class RoiCacher:
 def cache_rois(
     volume: xr.DataArray, edge_tables: EdgeTables, outdir: Path, padding: float = 300
 ):  # noqa: F821
+    """Write CREMI files for the given edge tables.
+
+    Produces one CREMI file per connector node,
+    which may contain several edges.
+
+    Parameters
+    ----------
+    volume : xr.DataArray
+        Data array with dimensions "z", "y", and "x",
+        and world-space coordinate arrays.
+    edge_tables : EdgeTables
+        Edges of interest, can be created from skeleton IDs or edges using pymaid.
+    outdir : Path
+        Directory under which to store output (should not exist).
+    padding : float, optional
+        In world units, how far outside the bounding box of the nodes involved in an edge should the ROI cover,
+        by default 300
+    """
     cacher = RoiCacher(volume, edge_tables, outdir, padding, True)
-    cacher.write_all()
+    cacher.write_connectors()
 
 
 class Bbox(NamedTuple):

@@ -1,14 +1,14 @@
 import logging
-import os
 from pathlib import Path
-from typing import Any, Literal, NamedTuple, NotRequired, Optional, Self, TypedDict
-from collections.abc import Sequence
+from typing import NamedTuple, NotRequired, Optional, Self, TypedDict
+from collections.abc import Iterator, Sequence
 from copy import copy, deepcopy
-import h5py
 
 import pymaid
 import numpy as np
 import pandas as pd
+
+from syn_area_label.constants import DIMS
 
 from .utils import DfBuilder, JsoPrimitive, Dim
 
@@ -70,11 +70,22 @@ def dict_to_df(d: DfDict) -> pd.DataFrame:
 
 class EdgeTables(NamedTuple):
     edges: pd.DataFrame
+    """edge_id, treenode_id_pre, connector_id, treenode_id_post"""
+
     treenodes: pd.DataFrame
+    """treenode_id, skeleton_id, x, y, z"""
+
     connectors: pd.DataFrame
+    """connector_id, x, y, z"""
+
     skeletons: pd.DataFrame
+    """skeleton_id, neuron_name"""
 
     def to_directory(self, path: Path, padding: Optional[dict[Dim, float]] = None):
+        """Store tables as a directory of TSVs.
+
+        Optionally include ROIs with the given amount of padding in each dimension.
+        """
         path.mkdir(exist_ok=True, parents=True)
         for name, df in self._asdict().items():
             p = path / f"{name}.tsv"
@@ -88,6 +99,7 @@ class EdgeTables(NamedTuple):
 
     @classmethod
     def from_directory(cls, path: Path) -> Self:
+        """Read from a directory of TSVs"""
         return cls(
             read_tsv(path / "edges.tsv", edge_columns),
             read_tsv(path / "treenodes.tsv", treenode_columns),
@@ -96,6 +108,7 @@ class EdgeTables(NamedTuple):
         )
 
     def to_dict(self, padding: Optional[dict[Dim, float]] = None) -> dict[str, DfDict]:
+        """Convert to a dict of dicts (for e.g. JSON serialisation)."""
         d = {k: df_to_dict(v) for k, v in self._asdict().items()}
         if padding is not None:
             df = self.rois(padding)
@@ -104,6 +117,7 @@ class EdgeTables(NamedTuple):
 
     @classmethod
     def from_dict(cls, d: dict[str, DfDict]) -> Self:
+        """Read from a dict of dataframe-like dicts (e.g. from JSON serialisation)"""
         return cls(**{k: dict_to_df(d[k]) for k in cls._fields})
 
     def to_hdf5(
@@ -112,6 +126,7 @@ class EdgeTables(NamedTuple):
         group: str = "",
         extra_tables: Optional[dict[str, pd.DataFrame]] = None,
     ):
+        """Store in pytables format in a given HDF5 container"""
         if extra_tables is None:
             extra_tables = dict()
         with pd.HDFStore(hdf5_path, "a") as f:
@@ -124,6 +139,7 @@ class EdgeTables(NamedTuple):
 
     @classmethod
     def from_hdf5(cls, hdf5_path, group: str = ""):
+        """Read from an HDF5 container."""
         with pd.HDFStore(hdf5_path, "r") as f:
             return cls(
                 f[group + "/edges"],
@@ -133,6 +149,7 @@ class EdgeTables(NamedTuple):
             )
 
     def merge_locations(self, neuron_names=False) -> pd.DataFrame:
+        """Get a single table containing all locations referenced."""
         df = self.edges
         df = pd.merge(df, self.connectors, on="connector_id", suffixes=(None, "_conn"))
         df.rename(columns={d: d + "_conn" for d in "xyz"}, inplace=True)
@@ -166,6 +183,7 @@ class EdgeTables(NamedTuple):
         return df
 
     def rois(self, padding: dict[Dim, float]) -> pd.DataFrame:
+        """Get the ROIs of each edge."""
         merged = self.merge_locations()
         suffixes = ["_conn", "_pre", "_post"]
         new_cols = dict()
@@ -176,6 +194,33 @@ class EdgeTables(NamedTuple):
             new_cols[f"{d}_max"] = xyz.max(axis=axis) + padding[d]
 
         return pd.DataFrame.from_dict({"edge_id": merged["edge_id"], **new_cols})
+
+    def total_roi(self, padding: dict[Dim, float]) -> dict[Dim, tuple[float, float]]:
+        """Get a single ROI covering all nodes"""
+        out = dict()
+        for d in DIMS:
+            mn = min(self.connectors[d].min(), self.treenodes[d].min())
+            mx = max(self.connectors[d].max(), self.treenodes[d].max())
+            out[d] = (mn - padding[d], mx + padding[d])
+        return out
+
+    def single_connector(self, connector_id: int) -> Self:
+        """Cut tables down to only those involving the given connector"""
+        conns = self.connectors[self.connectors["connector_id"] == connector_id]
+        edges = self.edges[self.edges["connector_id"] == connector_id]
+        tn_set = set(edges["treenode_id_pre"]).union(edges["treenode_id_post"])
+        treenodes = self.treenodes[self.treenodes["treenode_id"].isin(tn_set)]
+        skids = set(treenodes["skeleton_id"])
+        skeletons = self.skeletons[self.skeletons["skeleton_id"].isin(skids)]
+        return type(self)(
+            edges.copy(), treenodes.copy(), conns.copy(), skeletons.copy()
+        )
+
+    def by_connector(self) -> Iterator[tuple[int, Self]]:
+        """Yield an EdgeTables instance for each connector in this instance"""
+        conns = self.connectors["connector_id"].unique()
+        for c in conns:
+            yield c, self.single_connector(c)
 
     def in_roi(self, extents: dict[Dim, tuple[float, float]], copy=True) -> Self:
         """Cut tables down to only those where all nodes are in the ROI"""

@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Iterable, NamedTuple, Optional
+from typing import Callable, Iterable, NamedTuple, Optional, Literal
+from collections.abc import Sequence, Mapping, Hashable
 
 import h5py
 import networkx as nx
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from numpy.typing import DTypeLike
 
 logger = logging.getLogger(__name__)
+
+Dim = Literal["x", "y", "z"]
 
 
 def setup_logging(
@@ -289,7 +293,7 @@ def read_table_homogeneous(hdf5_file: h5py.File, name: str) -> pd.DataFrame:
 class DfBuilder:
     def __init__(self, dtypes: dict[Hashable, DTypeLike]) -> None:
         self.dtypes = dtypes
-        self.rows = []
+        self.rows: list[list] = []
 
     @property
     def length(self) -> int:
@@ -299,7 +303,7 @@ class DfBuilder:
     def width(self) -> int:
         return len(self.dtypes)
 
-    def append(self, row: Sequence):
+    def append(self, row: Sequence | Mapping):
         idx = self.length
         if isinstance(row, Mapping):
             self.rows.append([row[k] for k in self.dtypes])

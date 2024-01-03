@@ -18,4 +18,4 @@ else:
 
 CREDENTIALS_DIR = PROJECT_DIR / "credentials"
 
-DIMS = tuple("zyx")
+DIMS = ("z", "y", "x")
