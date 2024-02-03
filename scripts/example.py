@@ -6,13 +6,15 @@ import pymaid
 from pymaid.stack import Stack
 
 
-# Use a public CATMAID instance (see pymaid docs for non-public)
+# Instantiate the CATMAID client.
+# This example is public; see pymaid docs for authenticating with non-public instances.
 cm = pymaid.CatmaidInstance("https://l1em.catmaid.virtualflybrain.org", None)
 
-# Select a stack by name
+# Select a stack by name (visible in CATMAID UI).
 stack = Stack.from_catmaid("L1 CNS 0-tilt")
 
-# Select a public mirror by name (see `stack.set_mirror_auth` method for non-public).
+# Select a stack mirror by name (visible in CATMAID UI).
+# See `stack.set_mirror_auth` method for authenticating with non-public mirrors.
 # A nearby N5 or neuroglancer stack mirror will probably be fastest.
 stack.set_mirror("VFB")
 
