@@ -19,7 +19,8 @@ stack.set_mirror("VFB")
 # Use the scale 0 (maximum resolution) stack
 volume = stack.get_scale(0)
 
-# Find all of the edges whose postsynapses are on the given skeletons
+# Find all of the edges whose postsynapses are on the given skeletons.
+# See `EdgeTables.from_nodes` if you already know the connector and postsynaptic treenode IDs of interest.
 etables = EdgeTables.from_skeletons(
     post_skeleton_ids=[
         16015738,
