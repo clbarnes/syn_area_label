@@ -218,7 +218,8 @@ class RoiCacher:
         return count
 
     def write_connectors(
-        self, overwrite: bool = True, threads: Optional[int] = None
+        self,
+        overwrite: bool = True,  # threads: Optional[int] = None
     ) -> int:
         """Write one ROI per connector.
 
@@ -226,11 +227,6 @@ class RoiCacher:
         ----------
         overwrite : bool, optional
             Whether to overwrite existing ROIs at the output path, by default True
-        threads : int, optional
-            Number of threads to use.
-            If None (default), operate in serial.
-            If <= 0, use the number of CPUs available.
-            Otherwise, use this number of threads.
 
         Returns
         -------
@@ -240,10 +236,8 @@ class RoiCacher:
         self._write_shared()
 
         conns = self.edge_tables.connectors["connector_id"].unique()
-        if threads is None:
-            return self._write_connectors_serial(conns, overwrite)
-        else:
-            return self._write_connectors_threaded(conns, overwrite, threads)
+        return self._write_connectors_serial(conns, overwrite)
+        # return self._write_connectors_threaded(conns, overwrite, threads)
 
     # def write_all(self, overwrite=True):
     #     self._write_shared()
@@ -264,7 +258,7 @@ def cache_rois(
     edge_tables: EdgeTables,
     outdir: Path,
     padding: float = 300,
-    threads=None,
+    # threads=None,
 ):  # noqa: F821
     """Write CREMI files for the given edge tables.
 
@@ -283,14 +277,9 @@ def cache_rois(
     padding : float, optional
         In world units, how far outside the bounding box of the nodes involved in an edge should the ROI cover,
         by default 300
-    threads : int, optional
-        How many threads to use.
-        None (default) runs in serial;
-        < 1 uses the number of CPUs,
-        >= 1 uses that many threads.
     """
     cacher = RoiCacher(volume, edge_tables, outdir, padding, True)
-    cacher.write_connectors(threads=threads)
+    cacher.write_connectors(threads=None)
 
 
 class Bbox(NamedTuple):

@@ -37,8 +37,10 @@ The workflow is this:
 3. Open your image volume as an `xarray.DataArray` (pymaid has a utility for opening certain CATMAID stacks this way)
 4. Pass these to `syn_area_label.cache_rois`
 
-This will generate one CREMI-format HDF5 file per synaptic edge, and some extra tables.
+This will generate one CREMI-format HDF5 file per connector (which may contain several edges), and some extra tables.
 This should be annotated according to [`painting_instructions.md`](./painting_instructions.md).
+
+See [`scripts/example.py`](scripts/example.py) for example code.
 
 ```python
 #!/usr/bin/env python3

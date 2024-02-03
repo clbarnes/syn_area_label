@@ -6,12 +6,12 @@ import pymaid
 from pymaid.stack import Stack
 
 
-# use a public CATMAID instance
+# Use a public CATMAID instance (see pymaid docs for non-public)
 cm = pymaid.CatmaidInstance("https://l1em.catmaid.virtualflybrain.org", None)
 
 # Select a stack by name
 stack = Stack.from_catmaid("L1 CNS 0-tilt")
-# Select a public mirror by name
+# Select a public mirror by name (see `stack.set_mirror_auth` method for non-public)
 stack.set_mirror("VFB")
 # Use the scale 0 (maximum resolution) stack
 volume = stack.get_scale(0)
