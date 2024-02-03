@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Iterable, NamedTuple, Optional, Literal
+from typing import Callable, Iterable, NamedTuple, Optional, Literal, Union
 from collections.abc import Sequence, Mapping, Hashable
 
 import h5py
 import networkx as nx
 import numpy as np
+
 import pandas as pd
 from pathlib import Path
 from numpy.typing import DTypeLike
@@ -14,6 +15,9 @@ from numpy.typing import DTypeLike
 logger = logging.getLogger(__name__)
 
 Dim = Literal["x", "y", "z"]
+
+JsoPrimitive = Union[float, int, None, str]
+Jso = Union[JsoPrimitive, list["Jso"], dict[str, "Jso"]]
 
 
 def setup_logging(

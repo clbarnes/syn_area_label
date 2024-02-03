@@ -1,9 +1,11 @@
 from __future__ import annotations
 from abc import ABC
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 import math
+from os import cpu_count
 from pathlib import Path
-from typing import Iterable, Mapping, NamedTuple, Optional
+from typing import Iterable, Mapping, NamedTuple, Optional, Sequence
 from multiscale_read import NglN5Multiscale
 import zarr
 import xarray as xr
@@ -66,14 +68,38 @@ class RoiMetadata:
 
 
 class RoiCacher:
+    """Class for writing ROIs around connectors into CREMI files."""
+
     def __init__(
         self,
         volume: xr.DataArray,
         edge_tables: EdgeTables,
         outdir: Path,
         padding: float = 300,
-        cremi=False,
+        cremi=True,
     ) -> None:
+        """Instantiate the RoiCacher.
+
+        Parameters
+        ----------
+        volume : xr.DataArray
+            uint8 volume with coordinate arrays in world units,
+            and the dimensions "x", "y", and "z".
+            See the multiscale_read package and pymaid.Stack to create these easily.
+        edge_tables : EdgeTables
+            Tables of synaptic edges for inclusion (see `EdgeTables` class).
+        outdir : Path
+            Path to output directory.
+        padding : float, optional
+            How much to pad the ROI around the axis-aligned bounding box
+            of the presynapse-connector-postsynapse points,
+            in world units.
+            By default 300
+        cremi : bool, optional
+            Whether to write a CREMI-format HDF5 file with some extra tables.
+            Otherwise writes a directory of CSVs and the image volume in a numpy array.
+            By default True.
+        """
         self.volume = volume
         self.edge_tables = edge_tables
         self.outdir = Path(outdir)
@@ -164,20 +190,60 @@ class RoiCacher:
 
     #     return True
 
-    def write_connectors(self, overwrite=True):
-        """Write one ROI per connector.
-
-        Returns number of connectors written.
-        """
-        self._write_shared()
-
-        conns = self.edge_tables.connectors["connector_id"].unique()
+    def _write_connectors_serial(self, conns: Sequence[int], overwrite: bool) -> int:
         count = 0
         for conn in tqdm(conns, "writing connector ROIs"):
             res = self._write_connector(conn, overwrite)
             if res > 0:
                 count += 1
         return count
+
+    def _write_connectors_threaded(
+        self, conns: Sequence[int], overwrite: bool, threads: int
+    ) -> int:
+        threads = int(threads)
+        if threads <= 1:
+            threads = cpu_count() or 1
+
+        count = 0
+        with ThreadPoolExecutor(threads) as pool:
+            for res in tqdm(
+                pool.map(lambda c: self._write_connector(c, overwrite), conns),
+                "writing connector ROIs",
+                total=len(conns),
+            ):
+                if res > 0:
+                    count += 1
+
+        return count
+
+    def write_connectors(
+        self, overwrite: bool = True, threads: Optional[int] = None
+    ) -> int:
+        """Write one ROI per connector.
+
+        Parameters
+        ----------
+        overwrite : bool, optional
+            Whether to overwrite existing ROIs at the output path, by default True
+        threads : int, optional
+            Number of threads to use.
+            If None (default), operate in serial.
+            If <= 0, use the number of CPUs available.
+            Otherwise, use this number of threads.
+
+        Returns
+        -------
+        int
+            How many ROIs were written.
+        """
+        self._write_shared()
+
+        conns = self.edge_tables.connectors["connector_id"].unique()
+        if threads is None:
+            return self._write_connectors_serial(conns, overwrite)
+        else:
+            return self._write_connectors_threaded(conns, overwrite, threads)
 
     # def write_all(self, overwrite=True):
     #     self._write_shared()
@@ -194,7 +260,11 @@ class RoiCacher:
 
 
 def cache_rois(
-    volume: xr.DataArray, edge_tables: EdgeTables, outdir: Path, padding: float = 300
+    volume: xr.DataArray,
+    edge_tables: EdgeTables,
+    outdir: Path,
+    padding: float = 300,
+    threads=None,
 ):  # noqa: F821
     """Write CREMI files for the given edge tables.
 
@@ -213,9 +283,14 @@ def cache_rois(
     padding : float, optional
         In world units, how far outside the bounding box of the nodes involved in an edge should the ROI cover,
         by default 300
+    threads : int, optional
+        How many threads to use.
+        None (default) runs in serial;
+        < 1 uses the number of CPUs,
+        >= 1 uses that many threads.
     """
     cacher = RoiCacher(volume, edge_tables, outdir, padding, True)
-    cacher.write_connectors()
+    cacher.write_connectors(threads=threads)
 
 
 class Bbox(NamedTuple):
