@@ -279,7 +279,7 @@ def cache_rois(
         by default 300
     """
     cacher = RoiCacher(volume, edge_tables, outdir, padding, True)
-    cacher.write_connectors(threads=None)
+    cacher.write_connectors()
 
 
 class Bbox(NamedTuple):

@@ -41,22 +41,3 @@ This will generate one CREMI-format HDF5 file per connector (which may contain s
 This should be annotated according to [`painting_instructions.md`](./painting_instructions.md).
 
 See [`scripts/example.py`](scripts/example.py) for example code.
-
-```python
-#!/usr/bin/env python3
-from pathlib import Path
-
-from syn_area_label import EdgeTables, cache_rois
-from pymaid.stack import Stack
-
-skids = [
-    16015738,
-    16627773,
-    16629931,
-    14522124,
-]
-creds = json.loads(Path("path/to/credentials.json").read_text())
-cm = pymaid.CatmaidInstance()
-
-stack = Stack.from_catmaid("L1 CNS 0-tilt")
-```

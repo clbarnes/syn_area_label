@@ -12,6 +12,7 @@ Be careful to keep the Z location aligned with pixels,
 and not to rotate the view.
 
 - Open with `bigcat -i data_X.hdf5 -r /volumes/raw -l /volumes/labels/clefts`
+  - `scripts/open_cremi.sh data_X.hdf5` is equivalent
 - Hold space and scroll the mouse wheel to get a 1px brush
   - Label as close to 1px thick as possible
   - thicker lines will be skeletonised
@@ -28,3 +29,14 @@ and not to rotate the view.
 - Go to a new annotation, get a new ID, etc.
 
 `s`, `Ctrl+s`, `Ctrl+Shift+s` to save everything
+
+## Escaping off-axis views
+
+Do not:
+
+- Rotate the view (click and drag)
+- Scroll through Z in non-integer multiples of the Z resolution (`Ctrl` or `Shift` + scroll)
+
+You can re-align the Z location with the slicing plane by `g`oing any of the annotations.
+
+You can reset the orientation to align with the axis with `Shift + z`.
