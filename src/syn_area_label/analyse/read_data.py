@@ -123,16 +123,17 @@ class AreaInfo:
         edge_to_row = {
             row.edge_id: row for row in self.edge_tables.edges.itertuples(index=False)
         }
+        label_ids = {k: v for k, v in self.label_ids.items() if k in edge_to_row}
 
-        areas = calc.calculate(list(self.label_ids.values()))
+        areas = calc.calculate(list(label_ids.values()))
         if len(self.label_ids) != len(edge_to_row):
             logger.warning(
                 "Calculating area for %s annotated labels, but there are %s edges",
-                len(self.label_ids),
+                len(label_ids),
                 len(edge_to_row),
             )
 
-        rev_labels = {v: k for k, v in self.label_ids.items()}
+        rev_labels = {v: k for k, v in label_ids.items()}
         rows = []
         for label_id, area in areas.items():
             edge_id = rev_labels[label_id]
