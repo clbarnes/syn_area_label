@@ -40,4 +40,10 @@ The workflow is this:
 This will generate one CREMI-format HDF5 file per connector (which may contain several edges), and some extra tables.
 This should be annotated according to [`painting_instructions.md`](./painting_instructions.md).
 
-See [`scripts/example.py`](scripts/example.py) for example code.
+Then,
+
+1. Use `syn_area_label.AreaInfo.from_cremi` to load the CREMI file,
+then the resulting object's `calculate` method to return a table of areas.
+
+See the example scripts in [`./scripts`](./scripts/) for creating CREMI files populated with raw data from CATMAID,
+and extracting synaptic areas from annotations in those files.

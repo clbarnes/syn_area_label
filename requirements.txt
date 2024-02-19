@@ -13,6 +13,7 @@ tomli; python_version < '3.11'
 multiscale_read[http] @ git+https://github.com/clbarnes/multiscale_read.git@85f254878c41f4ce91198c30499be1855d3ac67d
 cremi @ git+https://github.com/clbarnes/cremi_python.git@py3_2023
 tables
+scikit-image
 
 #extra: dev
 

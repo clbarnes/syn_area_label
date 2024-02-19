@@ -19,6 +19,8 @@ Dim = Literal["x", "y", "z"]
 JsoPrimitive = Union[float, int, None, str]
 Jso = Union[JsoPrimitive, list["Jso"], dict[str, "Jso"]]
 
+TABLES_GROUP = "tables"
+
 
 def setup_logging(
     level=logging.DEBUG, logger_levels: Optional[dict[int, list[str]]] = None
@@ -153,7 +155,7 @@ def roi_containing_points(
 
 
 def roi_containing_rois(
-    rois: Iterable[tuple[WorldCoord, WorldCoord]]
+    rois: Iterable[tuple[WorldCoord, WorldCoord]],
 ) -> tuple[WorldCoord, WorldCoord]:
     corners = []
     for offset, shape in rois:
@@ -282,7 +284,7 @@ def write_table_homogeneous(
     hdf5_file: h5py.File, df: pd.DataFrame, name: str, dtype: DTypeLike
 ):
     """name is within /tables group"""
-    g = hdf5_file.require_group("tables")
+    g = hdf5_file.require_group(TABLES_GROUP)
     df_data = df.to_numpy(dtype)
     ds = g.create_dataset(name, data=df_data)
     ds.attrs["columns"] = list(df.columns)
@@ -290,7 +292,7 @@ def write_table_homogeneous(
 
 def read_table_homogeneous(hdf5_file: h5py.File, name: str) -> pd.DataFrame:
     """name is within /tables group"""
-    ds: h5py.Dataset = hdf5_file["/tables/" + name]
+    ds: h5py.Dataset = hdf5_file[f"/{TABLES_GROUP}/{name}"]
     return pd.DataFrame(ds[:], columns=ds.attrs["columns"])
 
 

@@ -16,7 +16,7 @@ import pandas as pd
 from functools import cache
 import networkx as nx
 import itertools
-from .utils import CompletionChecker, DfBuilder, Dim, project_presyn
+from .utils import CompletionChecker, DfBuilder, Dim, project_presyn, TABLES_GROUP
 
 from syn_area_label.synapses import EdgeTables
 
@@ -250,7 +250,7 @@ class RoiCacher:
 
     def _write_shared(self):
         self.roi_dir.mkdir(parents=True, exist_ok=True)
-        self.edge_tables.to_directory(self.outdir / "tables", self.padding_dict)
+        self.edge_tables.to_directory(self.outdir / TABLES_GROUP, self.padding_dict)
 
 
 def cache_rois(
@@ -279,7 +279,7 @@ def cache_rois(
         by default 300
     """
     cacher = RoiCacher(volume, edge_tables, outdir, padding, True)
-    cacher.write_connectors()
+    return cacher.write_connectors()
 
 
 class Bbox(NamedTuple):
@@ -491,7 +491,7 @@ class Roi:
 
     def to_directory(self, dpath: Path):
         dpath.mkdir(exist_ok=False, parents=True)
-        self.edge_tables.to_directory(dpath / "tables")
+        self.edge_tables.to_directory(dpath / TABLES_GROUP)
         eids = list(self.edge_tables.edges["edge_id"])
         np.save(dpath / "volume.npy", self.volume)
 
@@ -502,7 +502,7 @@ class Roi:
 
     @classmethod
     def from_directory(cls, dpath: Path):
-        etables = EdgeTables.from_directory(dpath / "tables")
+        etables = EdgeTables.from_directory(dpath / TABLES_GROUP)
         with dpath.joinpath("metadata.json").open() as f:
             all_meta = json.load(f)
         meta = {k: all_meta[v] for k, v in RoiMetadata.__dataclass_fields__}
@@ -572,4 +572,4 @@ class Roi:
             extra = dict()
         else:
             extra = {"site_ids": site_ids}
-        self.edge_tables.to_hdf5(fpath, "tables", extra)
+        self.edge_tables.to_hdf5(fpath, TABLES_GROUP, extra)

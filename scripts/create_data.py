@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import logging
 
 from syn_area_label import EdgeTables, cache_rois
 import pymaid
 from pymaid.stack import Stack
 
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Instantiate the CATMAID client.
 # This example is public; see pymaid docs for authenticating with non-public instances.

@@ -8,8 +8,7 @@ import pymaid
 import numpy as np
 import pandas as pd
 
-from syn_area_label.constants import DIMS
-
+from .constants import DIMS
 from .utils import DfBuilder, JsoPrimitive, Dim
 
 logger = logging.getLogger(__name__)
