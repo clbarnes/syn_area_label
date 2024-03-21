@@ -304,6 +304,12 @@ class EdgeTables(NamedTuple):
         wanted = set(zip(connector_ids, post_treenode_ids))
         node_to_skid = dict()
         for row in edge_df.itertuples(index=False):
+            if row.presynaptic_to_node is None:
+                logger.warn(
+                    "Skipping connector with no presynaptic site (%s)", row.connector_id
+                )
+                continue
+
             for post_tnid in row.postsynaptic_to_node:
                 if (row.connector_id, post_tnid) in wanted:
                     edge_builder.append(
